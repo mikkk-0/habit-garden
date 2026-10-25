@@ -2,7 +2,6 @@ package com.mikkk0.habitgarden
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlarmManager
 import android.app.AlertDialog
 import android.app.TimePickerDialog
 import android.content.ActivityNotFoundException
@@ -90,7 +89,7 @@ class MainActivity : Activity() {
             setPadding(Ui.dp(this@MainActivity, 20), Ui.dp(this@MainActivity, 16), Ui.dp(this@MainActivity, 20), Ui.dp(this@MainActivity, 32))
         }
         val scroll = ScrollView(this).apply {
-            fillViewport = true
+            isFillViewport = true
             setBackgroundColor(Ui.BACKGROUND)
             addView(page)
         }
@@ -133,7 +132,7 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 31 && !scheduler.exactAllowed()) {
             page.addView(permissionBanner("Для напоминаний точно в выбранное время разрешите точные будильники. Без разрешения Android может задержать уведомление.", "Настроить") {
                 try {
-                    startActivity(Intent(AlarmManager.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+                    startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
                 } catch (_: ActivityNotFoundException) {
                     startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
                 }

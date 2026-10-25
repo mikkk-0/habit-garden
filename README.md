@@ -47,6 +47,8 @@ cd habit-garden
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Код разделён на расчёты (`domain.py`), хранилище (`db.py`), напоминания (`reminders.py`), локальный API (`server.py`) и интерфейс (`static/`). Это позволит позже использовать тот же API и модель данных в мобильном клиенте.
+Для дальнейшей разработки есть [карта проекта](docs/DEVELOPMENT.md): компоненты, схема данных, API и порядок изменений.
+
+Код разделён на расчёты (`domain.py`), хранилище (`db.py`), напоминания (`reminders.py`), локальный API (`server.py`) и интерфейс (`static/`). Правила расчёта и формат данных можно будет использовать при создании мобильного клиента; синхронизацию понадобится спроектировать отдельно.
 
 Эмодзи и их порядок взяты из [Unicode Emoji 18.0](https://www.unicode.org/Public/emoji/latest/emoji-test.txt), русские названия и слова поиска — из [Unicode CLDR 49](https://github.com/unicode-org/cldr/blob/release-49/common/annotations/ru.xml). Каталог хранится локально в `src/habit_garden/static/emoji-catalog.json`, поэтому для выбора эмодзи интернет не нужен. Чтобы обновить каталог из официальных источников, запустите `python3 scripts/build_emoji_catalog.py`. Условия лицензии перечислены в `THIRD_PARTY_NOTICES.md`.

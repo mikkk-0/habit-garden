@@ -1,6 +1,18 @@
 #!/bin/sh
 set -eu
-cd "$(dirname "$0")"
+script_path=$(readlink -f "$0")
+cd "$(dirname "$script_path")"
+case "${1:-launch}" in
+  launch|background|stop) ;;
+  -h|--help)
+    printf 'Использование: habit-garden [launch|background|stop]\n'
+    exit 0
+    ;;
+  *)
+    printf 'Использование: habit-garden [launch|background|stop]\n' >&2
+    exit 2
+    ;;
+esac
 if [ ! -x .venv/bin/python ]; then
   python3 -m venv .venv
 fi

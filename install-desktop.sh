@@ -14,6 +14,7 @@ Icon=$project_dir/src/habit_garden/static/icon.svg
 Terminal=false
 Categories=Utility;Office;
 StartupNotify=true
+StartupWMClass=habit-garden
 EOF
 echo "Ярлык приложения создан: $launcher_dir/habit-garden.desktop"
 if [ "${1:-}" = "--autostart" ]; then

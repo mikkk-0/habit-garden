@@ -5,6 +5,7 @@ const state = { tasks: [], today: "", archived: false, editing: null, month: nul
 const monthNames = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 const weekdayNames = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
 let toastTimer;
+let midnightTimer;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -33,6 +34,10 @@ async function refresh() {
   state.tasks = data.tasks;
   state.today = data.today;
   render();
+  clearTimeout(midnightTimer);
+  const nextMidnight = new Date();
+  nextMidnight.setHours(24, 0, 1, 0);
+  midnightTimer = setTimeout(() => refresh().catch(report), nextMidnight - new Date());
 }
 
 function render() {

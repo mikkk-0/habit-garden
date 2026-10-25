@@ -37,8 +37,9 @@ class APITests(unittest.TestCase):
                 return error.code, json.load(error)
 
     def test_end_to_end_api(self):
-        status, created = self.request("/api/tasks", "POST", {"name": "Читать"})
+        status, created = self.request("/api/tasks", "POST", {"name": "Читать", "label_emoji": "📚"})
         self.assertEqual(status, 201)
+        self.assertEqual(created["label_emoji"], "📚")
         task_id = created["id"]
         today = created["created_on"]
         status, completed = self.request(f"/api/tasks/{task_id}/days/{today}", "PUT", {"completed": True})
@@ -54,6 +55,7 @@ class APITests(unittest.TestCase):
         _, listing = self.request("/api/tasks")
         self.assertEqual(len(listing["tasks"]), 1)
         self.assertEqual(listing["tasks"][0]["id"], task_id)
+        self.assertEqual(listing["tasks"][0]["label_emoji"], "📚")
 
     def test_rejects_cross_site_mutations_and_serves_interface(self):
         status, _ = self.request("/api/tasks", "POST", {"name": "Сон"}, {"Origin": "https://example.org"})
@@ -62,6 +64,10 @@ class APITests(unittest.TestCase):
             self.assertIn("Сад привычек", response.read().decode())
         with urllib.request.urlopen(self.base + "/icon.svg") as response:
             self.assertIn(b"<svg", response.read())
+        with urllib.request.urlopen(self.base + "/emoji-catalog.json") as response:
+            catalog = json.load(response)
+            self.assertEqual(catalog["emojiVersion"], "18.0")
+            self.assertGreater(len(catalog["items"]), 1000)
 
 
 if __name__ == "__main__":

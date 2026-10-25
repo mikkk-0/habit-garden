@@ -10,6 +10,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from .domain import habit_stats
+from .emoji_catalog import DEFAULT_EMOJI, allowed_emojis
 
 
 TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
@@ -39,6 +40,12 @@ def _validate_symbol(value: object) -> str:
     return symbol
 
 
+def _validate_emoji(value: object) -> str:
+    if not isinstance(value, str) or value not in allowed_emojis():
+        raise ValidationError("Выберите эмодзи из списка")
+    return value
+
+
 def _validate_time(value: object) -> str:
     if not isinstance(value, str) or not TIME_RE.fullmatch(value):
         raise ValidationError("Время должно быть в формате ЧЧ:ММ")
@@ -63,6 +70,7 @@ class HabitStore:
                 archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
                 symbol_off TEXT NOT NULL DEFAULT '○',
                 symbol_on TEXT NOT NULL DEFAULT '●',
+                label_emoji TEXT NOT NULL DEFAULT '🌱',
                 reminder_time TEXT NOT NULL DEFAULT '20:00',
                 last_notified_on TEXT
             );
@@ -73,6 +81,11 @@ class HabitStore:
             ) WITHOUT ROWID;
             """
         )
+        # Existing installations keep their tasks and completion history.
+        columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(habits)")}
+        if "label_emoji" not in columns:
+            with self._connection:
+                self._connection.execute("ALTER TABLE habits ADD COLUMN label_emoji TEXT NOT NULL DEFAULT '🌱'")
 
     def close(self) -> None:
         with self._lock:
@@ -89,12 +102,13 @@ class HabitStore:
         name = _validate_name(data.get("name"))
         off = _validate_symbol(data.get("symbol_off", "○"))
         on = _validate_symbol(data.get("symbol_on", "●"))
+        label = _validate_emoji(data.get("label_emoji", DEFAULT_EMOJI))
         reminder = _validate_time(data.get("reminder_time", "20:00"))
         with self._lock, self._connection:
             cur = self._connection.execute(
-                "INSERT INTO habits (name, created_on, symbol_off, symbol_on, reminder_time) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (name, today.isoformat(), off, on, reminder),
+                "INSERT INTO habits (name, created_on, symbol_off, symbol_on, label_emoji, reminder_time) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (name, today.isoformat(), off, on, label, reminder),
             )
             return self.get(cur.lastrowid, today)
 
@@ -123,7 +137,7 @@ class HabitStore:
     def update(self, habit_id: int, data: dict, today: date | None = None) -> dict:
         if not isinstance(data, dict):
             raise ValidationError("Неверный формат данных")
-        allowed = {"name", "symbol_off", "symbol_on", "reminder_time", "archived"}
+        allowed = {"name", "symbol_off", "symbol_on", "label_emoji", "reminder_time", "archived"}
         if not data or set(data) - allowed:
             raise ValidationError("Нет допустимых полей для изменения")
         values = {}
@@ -132,6 +146,8 @@ class HabitStore:
                 values[key] = _validate_name(value)
             elif key.startswith("symbol_"):
                 values[key] = _validate_symbol(value)
+            elif key == "label_emoji":
+                values[key] = _validate_emoji(value)
             elif key == "reminder_time":
                 values[key] = _validate_time(value)
             elif type(value) is bool:

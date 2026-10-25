@@ -125,11 +125,11 @@ class HabitHandler(BaseHTTPRequestHandler):
             result = store.set_completion(int(match.group(1)), day, self._body().get("completed"))
             self._wake()
             return self._json(200, result)
-        if method == "GET" and path in ("/", "/index.html", "/app.css", "/app.js", "/icon.svg"):
+        if method == "GET" and path in ("/", "/index.html", "/app.css", "/app.js", "/icon.svg", "/emoji-catalog.json"):
             name = "index.html" if path == "/" else path.lstrip("/")
             source = STATIC / name
             content = source.read_bytes()
-            mime = {".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml"}[source.suffix]
+            mime = {".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".json": "application/json"}[source.suffix]
             self.send_response(200)
             self.send_header("Content-Type", f"{mime}; charset=utf-8")
             self.send_header("Content-Length", str(len(content)))

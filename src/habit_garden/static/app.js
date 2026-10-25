@@ -1,11 +1,18 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const state = { tasks: [], today: "", archived: false, editing: null, month: null, days: new Set() };
+const state = { tasks: [], today: "", archived: false, editing: null, month: null, days: new Set(), selectedEmoji: "🌱", emojiCatalog: null, emojiCategory: "favorites", emojiLimit: 96 };
 const monthNames = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 const weekdayNames = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
+const emojiCategories = [
+  ["favorites", "Частые"], ["Smileys & Emotion", "Смайлы"], ["People & Body", "Люди"],
+  ["Animals & Nature", "Природа"], ["Food & Drink", "Еда"], ["Travel & Places", "Места"],
+  ["Activities", "Занятия"], ["Objects", "Предметы"], ["Symbols", "Символы"], ["Flags", "Флаги"],
+];
+const favoriteEmoji = ["🌱", "📚", "💧", "🏃", "🧘", "💪", "🍎", "🥗", "☕", "🪥", "💊", "🛌", "😴", "🚶", "🚴", "🏋️", "✍️", "📝", "💻", "🎨", "🎸", "🎵", "🧹", "🧺", "💰", "📅", "⏰", "❤️", "☀️", "🌙", "🌿", "🌸", "🐾", "🏠", "🧠", "🎯", "🔥", "⭐", "✅", "🫶"];
 let toastTimer;
 let midnightTimer;
+let emojiCatalogPromise;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -28,6 +35,76 @@ function showToast(message) {
   toastTimer = setTimeout(() => toast.classList.remove("show"), 3200);
 }
 function report(error) { showToast(error.message || String(error)); }
+
+async function loadEmojiCatalog() {
+  if (!emojiCatalogPromise) {
+    emojiCatalogPromise = api("/emoji-catalog.json").then((catalog) => {
+      state.emojiCatalog = catalog;
+      state.emojiBySymbol = new Map(catalog.items.map((item) => [item[0], item]));
+      setSelectedEmoji(state.selectedEmoji);
+      return catalog;
+    }).catch((error) => { emojiCatalogPromise = null; throw error; });
+  }
+  return emojiCatalogPromise;
+}
+
+function setSelectedEmoji(emoji) {
+  state.selectedEmoji = emoji;
+  $("#selectedEmoji").textContent = emoji;
+  const item = state.emojiBySymbol?.get(emoji);
+  $("#emojiName").textContent = item ? item[1] : "Метка задания";
+}
+
+function closeEmojiPicker() {
+  $("#emojiPicker").hidden = true;
+  $("#emojiTrigger").setAttribute("aria-expanded", "false");
+}
+
+function renderEmojiCategories() {
+  const container = $("#emojiCategories");
+  container.replaceChildren();
+  for (const [key, label] of emojiCategories) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "emoji-category"; button.textContent = label;
+    button.classList.toggle("active", key === state.emojiCategory);
+    button.addEventListener("click", () => { state.emojiCategory = key; state.emojiLimit = 96; $("#emojiSearch").value = ""; renderEmojiCategories(); renderEmojiGrid(); });
+    container.append(button);
+  }
+}
+
+function matchingEmoji() {
+  const query = $("#emojiSearch").value.trim().toLocaleLowerCase("ru-RU");
+  if (query) return state.emojiCatalog.items.filter(([emoji, name, keywords]) => `${emoji} ${name} ${keywords}`.toLocaleLowerCase("ru-RU").includes(query));
+  if (state.emojiCategory === "favorites") return favoriteEmoji.map((emoji) => state.emojiBySymbol.get(emoji)).filter(Boolean);
+  return state.emojiCatalog.items.filter((item) => item[3] === state.emojiCategory);
+}
+
+function renderEmojiGrid() {
+  const items = matchingEmoji();
+  const grid = $("#emojiGrid");
+  const fragment = document.createDocumentFragment();
+  for (const [emoji, name] of items.slice(0, state.emojiLimit)) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "emoji-choice"; button.textContent = emoji;
+    button.title = name; button.setAttribute("aria-label", name);
+    button.classList.toggle("selected", emoji === state.selectedEmoji);
+    button.addEventListener("click", () => { setSelectedEmoji(emoji); closeEmojiPicker(); $("#emojiTrigger").focus(); });
+    fragment.append(button);
+  }
+  grid.replaceChildren(fragment);
+  $("#emojiCount").textContent = `${items.length} эмодзи`;
+  $("#emojiEmpty").hidden = items.length !== 0;
+  $("#emojiMore").hidden = items.length <= state.emojiLimit;
+}
+
+async function toggleEmojiPicker() {
+  if (!$("#emojiPicker").hidden) { closeEmojiPicker(); return; }
+  await loadEmojiCatalog();
+  $("#emojiPicker").hidden = false;
+  $("#emojiTrigger").setAttribute("aria-expanded", "true");
+  renderEmojiCategories(); renderEmojiGrid();
+  $("#emojiSearch").focus();
+}
 
 async function refresh() {
   const data = await api("/api/tasks");
@@ -67,10 +144,13 @@ function createCard(task) {
   card.setAttribute("role", "button");
   card.setAttribute("aria-label", `${task.name}. ${task.completed_today ? "Выполнено сегодня" : "Не выполнено сегодня"}. Открыть настройки: Shift+Enter`);
   const top = document.createElement("div"); top.className = "card-top";
+  const icons = document.createElement("div"); icons.className = "card-icons";
+  const emoji = document.createElement("span"); emoji.className = "card-emoji"; emoji.textContent = task.label_emoji;
   const symbol = document.createElement("span"); symbol.className = "status-symbol"; symbol.textContent = task.completed_today ? task.symbol_on : task.symbol_off;
+  icons.append(emoji, symbol);
   const menu = document.createElement("button"); menu.className = "more-button"; menu.type = "button"; menu.textContent = "···"; menu.setAttribute("aria-label", `Календарь и настройки: ${task.name}`);
   menu.addEventListener("click", (event) => { event.stopPropagation(); openEdit(task.id); });
-  top.append(symbol, menu);
+  top.append(icons, menu);
   const name = document.createElement("h3"); name.textContent = task.name;
   const stats = document.createElement("div"); stats.className = "card-stats";
   for (const [value, label] of [[task.streak, "стрик, дней"], [task.total_days, "всего дней"], [`${task.completion_percent}%`, "выполнено"]]) {
@@ -110,6 +190,10 @@ async function setToday(task, completed) {
 function openNew() {
   state.editing = null;
   $("#taskForm").reset();
+  closeEmojiPicker();
+  state.emojiCategory = "favorites";
+  state.emojiLimit = 96;
+  setSelectedEmoji("🌱");
   $("#dialogEyebrow").textContent = "НОВОЕ ЗАДАНИЕ";
   $("#dialogTitle").textContent = "Что будем делать?";
   $("#calendarArea").hidden = true;
@@ -125,6 +209,10 @@ async function openEdit(id) {
   state.editing = id;
   state.month = { year: Number(state.today.slice(0, 4)), month: Number(state.today.slice(5, 7)) - 1 };
   $("#taskName").value = task.name;
+  closeEmojiPicker();
+  state.emojiCategory = "favorites";
+  state.emojiLimit = 96;
+  setSelectedEmoji(task.label_emoji);
   $("#symbolOff").value = task.symbol_off;
   $("#symbolOn").value = task.symbol_on;
   $("#reminderTime").value = task.reminder_time;
@@ -179,6 +267,11 @@ function renderCalendar(task) {
 $("#newButton").addEventListener("click", openNew);
 $("#emptyAdd").addEventListener("click", openNew);
 $("#closeDialog").addEventListener("click", () => $("#taskDialog").close());
+$("#emojiTrigger").addEventListener("click", () => toggleEmojiPicker().catch(report));
+$("#emojiSearch").addEventListener("input", () => { state.emojiLimit = 96; renderEmojiGrid(); });
+$("#emojiSearch").addEventListener("keydown", (event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeEmojiPicker(); $("#emojiTrigger").focus(); } });
+$("#emojiMore").addEventListener("click", () => { state.emojiLimit += 96; renderEmojiGrid(); });
+$("#taskDialog").addEventListener("close", closeEmojiPicker);
 $("#activeTab").addEventListener("click", () => { state.archived = false; render(); });
 $("#archiveTab").addEventListener("click", () => { state.archived = true; render(); });
 $("#prevMonth").addEventListener("click", () => { state.month.month--; if (state.month.month < 0) { state.month.month = 11; state.month.year--; } loadMonth().catch(report); });
@@ -199,7 +292,7 @@ $("#archiveButton").addEventListener("click", async () => {
 });
 $("#taskForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const payload = { name: $("#taskName").value, reminder_time: $("#reminderTime").value, symbol_off: $("#symbolOff").value, symbol_on: $("#symbolOn").value };
+  const payload = { name: $("#taskName").value, label_emoji: state.selectedEmoji, reminder_time: $("#reminderTime").value, symbol_off: $("#symbolOff").value, symbol_on: $("#symbolOn").value };
   try {
     if (state.editing) await api(`/api/tasks/${state.editing}`, { method: "PATCH", body: JSON.stringify(payload) });
     else await api("/api/tasks", { method: "POST", body: JSON.stringify(payload) });
@@ -209,4 +302,5 @@ $("#taskForm").addEventListener("submit", async (event) => {
 });
 
 refresh().catch(report);
+loadEmojiCatalog().catch(report);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh().catch(report); });

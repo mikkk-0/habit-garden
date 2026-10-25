@@ -2,6 +2,28 @@
 set -eu
 cd "$(dirname "$0")"
 project_dir=$PWD
+bin_dir="$HOME/.local/bin"
+bin_launcher="$bin_dir/habit-garden"
+mkdir -p "$bin_dir"
+if [ -e "$bin_launcher" ] || [ -L "$bin_launcher" ]; then
+  if [ "$(readlink -f "$bin_launcher")" != "$project_dir/run.sh" ]; then
+    echo "Команда уже занята: $bin_launcher" >&2
+    exit 1
+  fi
+fi
+ln -sfn "$project_dir/run.sh" "$bin_launcher"
+echo "Команда установлена: $bin_launcher"
+if [ -f "$HOME/.bashrc" ] && ! grep -Fq '# habit-garden: user commands' "$HOME/.bashrc"; then
+  cat >> "$HOME/.bashrc" <<'EOF'
+
+# habit-garden: user commands
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+EOF
+  echo "Путь к команде добавлен в ~/.bashrc; откройте новый терминал."
+fi
 launcher_dir=${XDG_DATA_HOME:-"$HOME/.local/share"}/applications
 mkdir -p "$launcher_dir"
 cat > "$launcher_dir/habit-garden.desktop" <<EOF

@@ -49,10 +49,14 @@ class StoreTests(unittest.TestCase):
     def test_emoji_label_can_be_created_and_changed(self):
         task = self.store.create({"name": "Читать", "label_emoji": "📚"}, self.today)
         self.assertEqual(task["label_emoji"], "📚")
+        self.assertNotIn("symbol_off", task)
+        self.assertNotIn("symbol_on", task)
         changed = self.store.update(task["id"], {"label_emoji": "🌱"}, self.today)
         self.assertEqual(changed["label_emoji"], "🌱")
         with self.assertRaises(ValidationError):
             self.store.update(task["id"], {"label_emoji": "не эмодзи"}, self.today)
+        with self.assertRaises(ValidationError):
+            self.store.update(task["id"], {"symbol_off": "○"}, self.today)
 
     def test_old_database_is_migrated_without_losing_completion(self):
         path = Path(self.temp.name) / "old.db"
@@ -74,6 +78,7 @@ class StoreTests(unittest.TestCase):
             task = migrated.get(1, self.today)
             self.assertEqual(task["label_emoji"], "🌱")
             self.assertTrue(task["completed_today"])
+            self.assertNotIn("symbol_off", task)
         finally:
             migrated.close()
 

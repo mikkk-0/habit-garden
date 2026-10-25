@@ -144,13 +144,10 @@ function createCard(task) {
   card.setAttribute("role", "button");
   card.setAttribute("aria-label", `${task.name}. ${task.completed_today ? "Выполнено сегодня" : "Не выполнено сегодня"}. Открыть настройки: Shift+Enter`);
   const top = document.createElement("div"); top.className = "card-top";
-  const icons = document.createElement("div"); icons.className = "card-icons";
   const emoji = document.createElement("span"); emoji.className = "card-emoji"; emoji.textContent = task.label_emoji;
-  const symbol = document.createElement("span"); symbol.className = "status-symbol"; symbol.textContent = task.completed_today ? task.symbol_on : task.symbol_off;
-  icons.append(emoji, symbol);
   const menu = document.createElement("button"); menu.className = "more-button"; menu.type = "button"; menu.textContent = "···"; menu.setAttribute("aria-label", `Календарь и настройки: ${task.name}`);
   menu.addEventListener("click", (event) => { event.stopPropagation(); openEdit(task.id); });
-  top.append(icons, menu);
+  top.append(emoji, menu);
   const name = document.createElement("h3"); name.textContent = task.name;
   const stats = document.createElement("div"); stats.className = "card-stats";
   for (const [value, label] of [[task.streak, "стрик, дней"], [task.total_days, "всего дней"], [`${task.completion_percent}%`, "выполнено"]]) {
@@ -164,7 +161,7 @@ function createCard(task) {
   const fill = document.createElement("span"); fill.style.width = `${task.completion_percent}%`; progress.append(fill);
   const bottom = document.createElement("div"); bottom.className = "card-bottom";
   const created = document.createElement("span"); created.textContent = `с ${formatDate(task.created_on)}`;
-  const today = document.createElement("span"); today.className = task.completed_today ? "done-indicator" : ""; today.textContent = task.completed_today ? "✓ сегодня" : "○ сегодня";
+  const today = document.createElement("span"); today.className = task.completed_today ? "done-indicator" : ""; today.textContent = task.completed_today ? "сделано сегодня" : "не сделано сегодня";
   bottom.append(created, today);
   card.append(top, name, stats, progress, bottom);
   card.addEventListener("click", () => { if (task.archived) openEdit(task.id); else setToday(task, true); });
@@ -213,8 +210,6 @@ async function openEdit(id) {
   state.emojiCategory = "favorites";
   state.emojiLimit = 96;
   setSelectedEmoji(task.label_emoji);
-  $("#symbolOff").value = task.symbol_off;
-  $("#symbolOn").value = task.symbol_on;
   $("#reminderTime").value = task.reminder_time;
   $("#dialogEyebrow").textContent = "КАЛЕНДАРЬ И НАСТРОЙКИ";
   $("#dialogTitle").textContent = task.name;
@@ -292,7 +287,7 @@ $("#archiveButton").addEventListener("click", async () => {
 });
 $("#taskForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const payload = { name: $("#taskName").value, label_emoji: state.selectedEmoji, reminder_time: $("#reminderTime").value, symbol_off: $("#symbolOff").value, symbol_on: $("#symbolOn").value };
+  const payload = { name: $("#taskName").value, label_emoji: state.selectedEmoji, reminder_time: $("#reminderTime").value };
   try {
     if (state.editing) await api(`/api/tasks/${state.editing}`, { method: "PATCH", body: JSON.stringify(payload) });
     else await api("/api/tasks", { method: "POST", body: JSON.stringify(payload) });

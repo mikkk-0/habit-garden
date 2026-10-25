@@ -34,12 +34,6 @@ def _validate_name(value: object) -> str:
     return name
 
 
-def _validate_symbol(value: object) -> str:
-    if not isinstance(value, str) or not (symbol := value.strip()) or len(symbol) > 8:
-        raise ValidationError("Символ должен содержать от 1 до 8 символов")
-    return symbol
-
-
 def _validate_emoji(value: object) -> str:
     if not isinstance(value, str) or value not in allowed_emojis():
         raise ValidationError("Выберите эмодзи из списка")
@@ -68,8 +62,6 @@ class HabitStore:
                 name TEXT NOT NULL,
                 created_on TEXT NOT NULL,
                 archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
-                symbol_off TEXT NOT NULL DEFAULT '○',
-                symbol_on TEXT NOT NULL DEFAULT '●',
                 label_emoji TEXT NOT NULL DEFAULT '🌱',
                 reminder_time TEXT NOT NULL DEFAULT '20:00',
                 last_notified_on TEXT
@@ -100,15 +92,13 @@ class HabitStore:
     def create(self, data: dict, today: date | None = None) -> dict:
         today = today or date.today()
         name = _validate_name(data.get("name"))
-        off = _validate_symbol(data.get("symbol_off", "○"))
-        on = _validate_symbol(data.get("symbol_on", "●"))
         label = _validate_emoji(data.get("label_emoji", DEFAULT_EMOJI))
         reminder = _validate_time(data.get("reminder_time", "20:00"))
         with self._lock, self._connection:
             cur = self._connection.execute(
-                "INSERT INTO habits (name, created_on, symbol_off, symbol_on, label_emoji, reminder_time) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (name, today.isoformat(), off, on, label, reminder),
+                "INSERT INTO habits (name, created_on, label_emoji, reminder_time) "
+                "VALUES (?, ?, ?, ?)",
+                (name, today.isoformat(), label, reminder),
             )
             return self.get(cur.lastrowid, today)
 
@@ -123,7 +113,7 @@ class HabitStore:
                     (habit_id, today.isoformat()),
                 )
             }
-            item = {key: row[key] for key in row.keys() if key != "last_notified_on"}
+            item = {key: row[key] for key in row.keys() if key not in {"last_notified_on", "symbol_off", "symbol_on"}}
             item["archived"] = bool(item["archived"])
             item.update(habit_stats(date.fromisoformat(row["created_on"]), days, today))
             return item
@@ -137,15 +127,13 @@ class HabitStore:
     def update(self, habit_id: int, data: dict, today: date | None = None) -> dict:
         if not isinstance(data, dict):
             raise ValidationError("Неверный формат данных")
-        allowed = {"name", "symbol_off", "symbol_on", "label_emoji", "reminder_time", "archived"}
+        allowed = {"name", "label_emoji", "reminder_time", "archived"}
         if not data or set(data) - allowed:
             raise ValidationError("Нет допустимых полей для изменения")
         values = {}
         for key, value in data.items():
             if key == "name":
                 values[key] = _validate_name(value)
-            elif key.startswith("symbol_"):
-                values[key] = _validate_symbol(value)
             elif key == "label_emoji":
                 values[key] = _validate_emoji(value)
             elif key == "reminder_time":

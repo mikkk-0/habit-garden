@@ -74,6 +74,16 @@ class EmojiPickerUITests(unittest.TestCase):
                     wait(100)
                 else:
                     self.fail("Saved emoji was not shown on the card")
+                self.assertFalse(evaluate(view, "Boolean(document.querySelector('.status-symbol'))"))
+                self.assertEqual(evaluate(view, "getComputedStyle(document.querySelector('.card-emoji')).filter"), "grayscale(1)")
+                evaluate(view, "document.querySelector('.task-card').click()")
+                for _ in range(30):
+                    if store.list()[0]["completed_today"] and evaluate(view, "document.querySelector('.task-card')?.classList.contains('is-done')"):
+                        break
+                    wait(100)
+                else:
+                    self.fail("Card did not switch to the completed state")
+                self.assertEqual(evaluate(view, "getComputedStyle(document.querySelector('.card-emoji')).filter"), "none")
             finally:
                 view.close()
                 view.page().deleteLater()

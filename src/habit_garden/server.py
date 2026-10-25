@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .db import HabitStore, ValidationError
+from .order import HabitOrder, default_order_path
 from .reminders import ReminderScheduler
 
 
@@ -28,10 +29,11 @@ class HabitHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, address: tuple[str, int], store: HabitStore, scheduler: ReminderScheduler | None = None):
+    def __init__(self, address: tuple[str, int], store: HabitStore, scheduler: ReminderScheduler | None = None, order: HabitOrder | None = None):
         super().__init__(address, HabitHandler)
         self.store = store
         self.scheduler = scheduler
+        self.order = order or HabitOrder(default_order_path())
 
 
 class HabitHandler(BaseHTTPRequestHandler):
@@ -92,9 +94,12 @@ class HabitHandler(BaseHTTPRequestHandler):
                 return self._json(415, {"error": "Ожидается application/json"})
         if method == "GET" and path == "/api/health":
             return self._json(200, {"ok": True, "app": "habit-garden", "pid": os.getpid()})
+        if path == "/api/order" and method == "PUT":
+            self.server.order.save(self._body().get("ids"), {task["id"] for task in store.list()})
+            return self._json(200, {"ok": True})
         if path == "/api/tasks":
             if method == "GET":
-                return self._json(200, {"tasks": store.list(), "today": date.today().isoformat()})
+                return self._json(200, {"tasks": self.server.order.sort(store.list()), "today": date.today().isoformat()})
             if method == "POST":
                 result = store.create(self._body())
                 self._wake()

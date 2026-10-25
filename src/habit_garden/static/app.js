@@ -1,7 +1,7 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const state = { tasks: [], today: "", archived: false, editing: null, month: null, days: new Set(), selectedEmoji: "🌱", emojiCatalog: null, emojiCategory: "favorites", emojiLimit: 96 };
+const state = { tasks: [], today: "", archived: false, editing: null, month: null, days: new Set(), selectedEmoji: "🌱", emojiCatalog: null, emojiCategory: "favorites", emojiLimit: 96, draggedTaskId: null };
 const monthNames = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
 const weekdayNames = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
 const emojiCategories = [
@@ -137,17 +137,77 @@ function render() {
   $("#emptyAdd").hidden = state.archived;
 }
 
+function clearDropIndicators() {
+  for (const card of document.querySelectorAll(".task-card")) {
+    card.classList.remove("drop-before", "drop-after", "drop-vertical");
+  }
+}
+
+function dropPosition(card, event) {
+  const cards = $("#taskGrid").children;
+  const vertical = cards.length < 2 || cards[0].offsetTop !== cards[1].offsetTop;
+  const bounds = card.getBoundingClientRect();
+  const after = vertical
+    ? event.clientY >= bounds.top + bounds.height / 2
+    : event.clientX >= bounds.left + bounds.width / 2;
+  return { after, vertical };
+}
+
+async function moveTask(sourceId, targetId, after, focusHandle = false) {
+  if (sourceId === targetId) return;
+  const ids = state.tasks.map((task) => task.id);
+  const sourceIndex = ids.indexOf(sourceId);
+  if (sourceIndex < 0 || !ids.includes(targetId)) return;
+  ids.splice(sourceIndex, 1);
+  ids.splice(ids.indexOf(targetId) + (after ? 1 : 0), 0, sourceId);
+  const previous = state.tasks;
+  const byId = new Map(previous.map((task) => [task.id, task]));
+  state.tasks = ids.map((id) => byId.get(id));
+  render();
+  if (focusHandle) $("#taskGrid").querySelector(`[data-task-id="${sourceId}"] .drag-handle`)?.focus();
+  try {
+    await api("/api/order", { method: "PUT", body: JSON.stringify({ ids }) });
+  } catch (error) {
+    await refresh();
+    report(error);
+  }
+}
+
 function createCard(task) {
   const card = document.createElement("article");
   card.className = `task-card${task.completed_today ? " is-done" : ""}${task.archived ? " is-archived" : ""}`;
+  card.dataset.taskId = task.id;
   card.tabIndex = 0;
   card.setAttribute("role", "button");
   card.setAttribute("aria-label", `${task.name}. ${task.completed_today ? "Выполнено сегодня" : "Не выполнено сегодня"}. Открыть настройки: Shift+Enter`);
   const top = document.createElement("div"); top.className = "card-top";
   const emoji = document.createElement("span"); emoji.className = "card-emoji"; emoji.textContent = task.label_emoji;
+  const actions = document.createElement("div"); actions.className = "card-actions";
+  const handle = document.createElement("button"); handle.className = "drag-handle"; handle.type = "button"; handle.draggable = true; handle.textContent = "⠿";
+  handle.title = "Перетащить для изменения порядка";
+  handle.setAttribute("aria-label", `Переместить ${task.name}; стрелки меняют порядок`);
+  handle.addEventListener("click", (event) => event.stopPropagation());
+  handle.addEventListener("auxclick", (event) => event.stopPropagation());
+  handle.addEventListener("dragstart", (event) => {
+    state.draggedTaskId = task.id;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(task.id));
+    card.classList.add("dragging");
+  });
+  handle.addEventListener("dragend", () => { state.draggedTaskId = null; clearDropIndicators(); card.classList.remove("dragging"); });
+  handle.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    const direction = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    const visible = state.tasks.filter((item) => item.archived === state.archived);
+    const neighbor = visible[visible.findIndex((item) => item.id === task.id) + direction];
+    if (neighbor) moveTask(task.id, neighbor.id, direction > 0, true).catch(report);
+  });
   const menu = document.createElement("button"); menu.className = "more-button"; menu.type = "button"; menu.textContent = "···"; menu.setAttribute("aria-label", `Календарь и настройки: ${task.name}`);
   menu.addEventListener("click", (event) => { event.stopPropagation(); openEdit(task.id); });
-  top.append(emoji, menu);
+  actions.append(handle, menu);
+  top.append(emoji, actions);
   const name = document.createElement("h3"); name.textContent = task.name;
   const stats = document.createElement("div"); stats.className = "card-stats";
   for (const [value, label] of [[task.streak, "стрик, дней"], [task.total_days, "всего дней"], [`${task.completion_percent}%`, "выполнено"]]) {
@@ -164,6 +224,25 @@ function createCard(task) {
   const today = document.createElement("span"); today.className = task.completed_today ? "done-indicator" : ""; today.textContent = task.completed_today ? "сделано сегодня" : "не сделано сегодня";
   bottom.append(created, today);
   card.append(top, name, stats, progress, bottom);
+  card.addEventListener("dragover", (event) => {
+    if (state.draggedTaskId === null || state.draggedTaskId === task.id) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const { after, vertical } = dropPosition(card, event);
+    clearDropIndicators();
+    card.classList.add(after ? "drop-after" : "drop-before");
+    if (vertical) card.classList.add("drop-vertical");
+  });
+  card.addEventListener("drop", (event) => {
+    if (state.draggedTaskId === null || state.draggedTaskId === task.id) return;
+    event.preventDefault();
+    const sourceId = state.draggedTaskId;
+    const { after } = dropPosition(card, event);
+    state.draggedTaskId = null;
+    clearDropIndicators();
+    $("#taskGrid").querySelector(`[data-task-id="${sourceId}"]`)?.classList.remove("dragging");
+    moveTask(sourceId, task.id, after).catch(report);
+  });
   card.addEventListener("click", () => { if (task.archived) openEdit(task.id); else setToday(task, true); });
   card.addEventListener("auxclick", (event) => { if (event.button === 1) { event.preventDefault(); if (!task.archived) setToday(task, false); } });
   card.addEventListener("mousedown", (event) => { if (event.button === 1) event.preventDefault(); });

@@ -14,6 +14,7 @@ except ImportError:
     QApplication = None
 
 from habit_garden.db import HabitStore
+from habit_garden.order import HabitOrder
 from habit_garden.server import HabitHTTPServer
 
 
@@ -36,10 +37,11 @@ def evaluate(view, script):
 
 @unittest.skipUnless(QApplication is not None and (os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY")), "Qt display is unavailable")
 class EmojiPickerUITests(unittest.TestCase):
-    def test_search_select_and_save_emoji(self):
+    def test_search_select_save_emoji_and_reorder_cards(self):
         with tempfile.TemporaryDirectory() as directory:
             store = HabitStore(Path(directory) / "test.db")
-            server = HabitHTTPServer(("127.0.0.1", 0), store)
+            order_path = Path(directory) / "order.json"
+            server = HabitHTTPServer(("127.0.0.1", 0), store, order=HabitOrder(order_path))
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
             app = QApplication.instance() or QApplication(["habit-garden-ui-test"])
@@ -84,6 +86,45 @@ class EmojiPickerUITests(unittest.TestCase):
                 else:
                     self.fail("Card did not switch to the completed state")
                 self.assertEqual(evaluate(view, "getComputedStyle(document.querySelector('.card-emoji')).filter"), "none")
+                first_id = store.list()[0]["id"]
+                second_id = store.create({"name": "Прогулка"})["id"]
+                evaluate(view, "refresh()")
+                for _ in range(30):
+                    if evaluate(view, "document.querySelectorAll('.task-card').length") == 2:
+                        break
+                    wait(100)
+                self.assertEqual(evaluate(view, "Array.from(document.querySelectorAll('.task-card')).map(c => c.dataset.taskId).join(',')"), f"{second_id},{first_id}")
+                evaluate(view, f"""
+                    const source = document.querySelector('[data-task-id="{first_id}"] .drag-handle');
+                    const target = document.querySelector('[data-task-id="{second_id}"]');
+                    const rect = target.getBoundingClientRect();
+                    const data = new DataTransfer();
+                    source.dispatchEvent(new DragEvent('dragstart', {{ bubbles: true, dataTransfer: data }}));
+                    target.dispatchEvent(new DragEvent('dragover', {{ bubbles: true, cancelable: true, dataTransfer: data, clientX: rect.left + 2, clientY: rect.top + 2 }}));
+                    target.dispatchEvent(new DragEvent('drop', {{ bubbles: true, cancelable: true, dataTransfer: data, clientX: rect.left + 2, clientY: rect.top + 2 }}));
+                """)
+                for _ in range(30):
+                    if order_path.exists():
+                        break
+                    wait(100)
+                self.assertEqual(HabitOrder(order_path).load(), [first_id, second_id])
+                self.assertEqual(evaluate(view, "Array.from(document.querySelectorAll('.task-card')).map(c => c.dataset.taskId).join(',')"), f"{first_id},{second_id}")
+                self.assertTrue(store.get(first_id)["completed_today"])
+                self.assertFalse(store.get(second_id)["completed_today"])
+                reloaded = []
+                reload_loop = QEventLoop()
+                view.loadFinished.connect(lambda ok: (reloaded.append(ok), reload_loop.quit()))
+                view.reload()
+                QTimer.singleShot(5000, reload_loop.quit)
+                reload_loop.exec()
+                self.assertEqual(reloaded, [True])
+                for _ in range(30):
+                    order = evaluate(view, "Array.from(document.querySelectorAll('.task-card')).map(c => c.dataset.taskId).join(',')")
+                    if order == f"{first_id},{second_id}":
+                        break
+                    wait(100)
+                else:
+                    self.fail("Saved order was not restored after reloading the interface")
             finally:
                 view.close()
                 view.page().deleteLater()

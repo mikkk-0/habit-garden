@@ -27,3 +27,13 @@
 @media(max-width:600px){.emoji-grid{grid-template-columns:repeat(6,1fr)}.emoji-choice{font-size:23px}.emoji-result-heading span:last-child{display:none}}
 
 .reminder-field{margin-top:20px}
+
+.card-actions{display:flex;align-items:center;gap:2px}
+.drag-handle{width:34px;height:34px;border:0;border-radius:9px;background:transparent;color:#9cac9d;font:inherit;font-size:22px;line-height:1;cursor:grab;touch-action:none}
+.drag-handle:hover,.drag-handle:focus-visible{background:#e3eee0;color:#335c44;outline:none}
+.drag-handle:active{cursor:grabbing}
+.task-card.dragging{opacity:.55}
+.task-card.drop-before{box-shadow:inset 5px 0 #6aa978;border-color:#6aa978}
+.task-card.drop-after{box-shadow:inset -5px 0 #6aa978;border-color:#6aa978}
+.task-card.drop-before.drop-vertical{box-shadow:inset 0 5px #6aa978}
+.task-card.drop-after.drop-vertical{box-shadow:inset 0 -5px #6aa978}

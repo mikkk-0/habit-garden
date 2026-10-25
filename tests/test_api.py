@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import tempfile
 import threading
 import unittest
@@ -7,6 +8,7 @@ import urllib.request
 from pathlib import Path
 
 from habit_garden.db import HabitStore
+from habit_garden.order import HabitOrder
 from habit_garden.server import HabitHTTPServer
 
 
@@ -14,7 +16,8 @@ class APITests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.store = HabitStore(Path(self.temp.name) / "habits.db")
-        self.server = HabitHTTPServer(("127.0.0.1", 0), self.store)
+        self.order_path = Path(self.temp.name) / "order.json"
+        self.server = HabitHTTPServer(("127.0.0.1", 0), self.store, order=HabitOrder(self.order_path))
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.base = f"http://127.0.0.1:{self.server.server_port}"
@@ -68,6 +71,31 @@ class APITests(unittest.TestCase):
             catalog = json.load(response)
             self.assertEqual(catalog["emojiVersion"], "18.0")
             self.assertGreater(len(catalog["items"]), 1000)
+
+    def test_order_is_kept_in_a_local_file(self):
+        _, first = self.request("/api/tasks", "POST", {"name": "Первое"})
+        _, second = self.request("/api/tasks", "POST", {"name": "Второе"})
+        ids = [first["id"], second["id"]]
+        _, listing = self.request("/api/tasks")
+        self.assertEqual([task["id"] for task in listing["tasks"]], ids[::-1])
+        status, _ = self.request("/api/order", "PUT", {"ids": ids})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(self.order_path.read_text()), ids)
+        self.assertEqual(HabitOrder(self.order_path).load(), ids)
+        _, listing = self.request("/api/tasks")
+        self.assertEqual([task["id"] for task in listing["tasks"]], ids)
+        self.assertEqual([task["id"] for task in self.store.list()], ids[::-1])
+        _, new_task = self.request("/api/tasks", "POST", {"name": "Новое"})
+        _, listing = self.request("/api/tasks")
+        self.assertEqual([task["id"] for task in listing["tasks"]], [new_task["id"], *ids])
+        self.request(f"/api/tasks/{first['id']}", "PATCH", {"archived": True})
+        _, listing = self.request("/api/tasks")
+        self.assertEqual([task["id"] for task in listing["tasks"]], [new_task["id"], *ids])
+        with sqlite3.connect(self.store.path) as connection:
+            columns = [row[1] for row in connection.execute("PRAGMA table_info(habits)")]
+        self.assertNotIn("sort_order", columns)
+        status, _ = self.request("/api/order", "PUT", {"ids": [first["id"], first["id"]]})
+        self.assertEqual(status, 400)
 
 
 if __name__ == "__main__":

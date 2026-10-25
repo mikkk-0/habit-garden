@@ -65,7 +65,7 @@ def open_window() -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Сад привычек — локальный трекер привычек")
-    parser.add_argument("command", choices=("launch", "serve", "stop"), nargs="?", default="launch")
+    parser.add_argument("command", choices=("launch", "background", "serve", "stop"), nargs="?", default="launch")
     args = parser.parse_args(argv)
     if args.command == "serve":
         store = HabitStore(default_database_path())
@@ -81,6 +81,8 @@ def main(argv: list[str] | None = None) -> None:
             print("Сад привычек остановлен")
         else:
             print("Сад привычек уже остановлен")
+    elif args.command == "background":
+        start_background()
     else:
         start_background()
         open_window()

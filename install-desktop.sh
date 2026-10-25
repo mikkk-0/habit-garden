@@ -19,6 +19,15 @@ echo "Ярлык приложения создан: $launcher_dir/habit-garden.d
 if [ "${1:-}" = "--autostart" ]; then
   autostart_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}/autostart
   mkdir -p "$autostart_dir"
-  cp "$launcher_dir/habit-garden.desktop" "$autostart_dir/habit-garden.desktop"
+  cat > "$autostart_dir/habit-garden.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Сад привычек — напоминания
+Comment=Фоновые напоминания о привычках
+Exec=$project_dir/run.sh background
+Icon=$project_dir/src/habit_garden/static/icon.svg
+Terminal=false
+X-GNOME-Autostart-enabled=true
+EOF
   echo "Автозапуск напоминаний включён: $autostart_dir/habit-garden.desktop"
 fi

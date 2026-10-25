@@ -1,0 +1,3 @@
+"""Habit Garden: local daily habit tracker."""
+
+__version__ = "0.1.0"

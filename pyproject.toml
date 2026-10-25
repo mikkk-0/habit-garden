@@ -1,0 +1,14 @@
+[project]
+name = "habit-garden"
+version = "0.1.0"
+description = "Локальный трекер ежедневных привычек"
+requires-python = ">=3.10"
+
+[project.scripts]
+habit-garden = "habit_garden.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+habit_garden = ["static/*"]
